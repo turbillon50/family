@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #020a12;
+  --fg: #e8f0f7;
+  --muted: #7d92a8;
+  --line: rgba(255, 255, 255, 0.08);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  min-height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Subtle scrollbar tuned for the dark canvas. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Crystal glow used for the family wordmark + active channel. */
+.crystal-glow {
+  text-shadow:
+    0 0 12px rgba(0, 229, 204, 0.35),
+    0 0 28px rgba(0, 229, 204, 0.18);
+}
