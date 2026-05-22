@@ -16,8 +16,23 @@ import { getDemoStore } from './demo/store';
 // onboarding before Neon is wired, and screenshots.
 
 export function isDemoMode(): boolean {
-  return process.env.FAMILY_DEMO_MODE === '1';
+  if (process.env.FAMILY_DEMO_MODE === '1') return true;
+  // Safety net: in any environment without a database wired up (typical for
+  // first-time Vercel previews), fall back to the in-memory store rather
+  // than crash. The login page still surfaces the demo banner.
+  if (!process.env.DATABASE_URL) {
+    if (!warnedAutoDemo) {
+      console.warn(
+        '[family] DATABASE_URL not set — running in demo mode (in-memory).',
+      );
+      warnedAutoDemo = true;
+    }
+    return true;
+  }
+  return false;
 }
+
+let warnedAutoDemo = false;
 
 // ---- Public types returned to routes / UI ----------------------------------
 
