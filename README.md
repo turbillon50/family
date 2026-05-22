@@ -35,6 +35,23 @@ ORM · Neon Postgres serverless · Zod · SSE · Postgres LISTEN/NOTIFY · pino.
 
 ## Cómo levantarlo
 
+### Modo demo (sin Neon, en 30 segundos)
+
+Para ver la UI completa con el roster, los canales y una conversación de
+bienvenida ya sembrada en `#lounge`:
+
+```bash
+npm install
+FAMILY_DEMO_MODE=1 npm run dev
+# abre http://localhost:3000, escribe cualquier palabra y entra
+```
+
+En modo demo no hay DB ni fan-out a los agentes — todo vive en memoria
+del proceso y se resetea al reiniciar. Útil para previews, screenshots y
+walkthroughs.
+
+### Modo real (con Neon)
+
 ```bash
 # 1. Dependencias
 npm install

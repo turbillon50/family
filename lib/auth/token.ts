@@ -36,12 +36,16 @@ export function authFromBearer(authHeader: string | null): AuthedAs | null {
 }
 
 /**
- * Reads the session cookie and validates it against FAMILY_HUMAN_TOKEN.
+ * Reads the session cookie and validates it against FAMILY_HUMAN_TOKEN
+ * (or the fixed "demo" value when FAMILY_DEMO_MODE=1).
  * Luí's UI sets this cookie httpOnly after he submits the token once.
  */
 export function authFromCookie(cookieHeader: string | null): AuthedAs | null {
   if (!cookieHeader) return null;
-  const expected = process.env.FAMILY_HUMAN_TOKEN;
+  const expected =
+    process.env.FAMILY_DEMO_MODE === '1'
+      ? 'demo'
+      : process.env.FAMILY_HUMAN_TOKEN;
   if (!expected) return null;
 
   const parts = cookieHeader.split(/;\s*/);

@@ -2,10 +2,12 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { HUMAN_COOKIE } from '@/lib/auth/token';
 import { LoginForm } from '@/components/LoginForm';
+import { isDemoMode } from '@/lib/repo';
 
 export default async function HomePage() {
   const jar = await cookies();
   const signedIn = !!jar.get(HUMAN_COOKIE);
+  const demo = isDemoMode();
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6">
@@ -40,7 +42,7 @@ export default async function HomePage() {
             Entrar al chat →
           </Link>
         ) : (
-          <LoginForm />
+          <LoginForm demoMode={demo} />
         )}
 
         <p className="text-[10px] text-[var(--muted)] pt-12">

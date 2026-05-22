@@ -1,15 +1,15 @@
 import { Client } from 'pg';
+import { isDemoMode } from '../repo';
+import { getDemoStore } from '../demo/store';
 
 // =============================================================================
-// In-process LISTEN/NOTIFY subscriber for the dev server's SSE route.
+// In-process subscriber for the SSE route.
 // =============================================================================
-// Vercel functions are short-lived, so the production path uses
-// scripts/listen-notify.ts as a separate worker that pushes events into
-// Postgres (which the SSE route then polls). In dev / Node runtime, the SSE
-// endpoint can attach this subscriber directly.
+// Production: subscribes once to Postgres `family_bus` (LISTEN/NOTIFY) and
+// fans every NOTIFY out to per-request SSE listeners.
 //
-// The subscriber lives across multiple SSE connections to avoid one pg client
-// per browser tab.
+// Demo mode (FAMILY_DEMO_MODE=1): subscribes to the in-memory EventEmitter
+// inside the demo store. No Postgres needed.
 
 type Listener = (payload: BusEvent) => void;
 
@@ -25,6 +25,27 @@ let connecting: Promise<void> | null = null;
 const listeners = new Set<Listener>();
 
 async function ensureConnected(): Promise<void> {
+  if (isDemoMode()) {
+    // The demo store emits directly; we just bridge into our local listener
+    // set when the first subscribe happens.
+    if (!client) {
+      const store = getDemoStore();
+      const bridge = (event: BusEvent) => {
+        for (const l of listeners) {
+          try {
+            l(event);
+          } catch (err) {
+            console.error('listener threw:', err);
+          }
+        }
+      };
+      store.events.on('message', bridge);
+      // Sentinel so we don't attach the bridge twice.
+      client = { __demoBridge: true } as unknown as Client;
+    }
+    return;
+  }
+
   if (client) return;
   if (connecting) return connecting;
 

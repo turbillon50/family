@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { HUMAN_COOKIE } from '@/lib/auth/token';
+import { isDemoMode } from '@/lib/repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// In demo mode, any non-empty token is accepted and the cookie carries the
+// fixed "demo" string — keeps the auth path identical so the rest of the
+// stack doesn't branch on demo vs prod.
+const DEMO_TOKEN = 'demo';
 
 // POST /api/session
 // Body: { token: string }
@@ -18,18 +24,24 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const token = typeof body.token === 'string' ? body.token : '';
-  const expected = process.env.FAMILY_HUMAN_TOKEN;
+
+  const expected = isDemoMode()
+    ? DEMO_TOKEN
+    : process.env.FAMILY_HUMAN_TOKEN;
 
   if (!expected) {
     return new Response('FAMILY_HUMAN_TOKEN not configured', { status: 503 });
   }
 
-  if (token.length !== expected.length || token !== expected) {
+  // Demo: accept any non-empty token, store the fixed cookie value.
+  const effective = isDemoMode() ? (token ? DEMO_TOKEN : '') : token;
+
+  if (effective.length !== expected.length || effective !== expected) {
     return new Response('invalid token', { status: 401 });
   }
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(HUMAN_COOKIE, token, {
+  res.cookies.set(HUMAN_COOKIE, effective, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',

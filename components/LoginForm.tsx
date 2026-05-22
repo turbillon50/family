@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export function LoginForm() {
+export function LoginForm({ demoMode = false }: { demoMode?: boolean }) {
   const router = useRouter();
   const [token, setToken] = useState('');
   const [pending, setPending] = useState(false);
@@ -46,7 +46,7 @@ export function LoginForm() {
         value={token}
         onChange={(e) => setToken(e.target.value)}
         className="rounded-xl bg-ink-900 border border-white/10 px-4 py-3 outline-none focus:border-agent-tanit/60 focus:shadow-glow text-sm"
-        placeholder="••••••••••"
+        placeholder={demoMode ? 'cualquier palabra · estás en demo' : '••••••••••'}
       />
       <button
         type="submit"
@@ -55,6 +55,11 @@ export function LoginForm() {
       >
         {pending ? 'Entrando…' : 'Abrir la casa'}
       </button>
+      {demoMode && (
+        <p className="text-[10px] text-agent-tanit/70 text-center">
+          Modo demo activo · sin Neon, datos en memoria
+        </p>
+      )}
       {error && (
         <p className="text-xs text-agent-break/90 text-center">{error}</p>
       )}
