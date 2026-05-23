@@ -14,11 +14,27 @@ export async function GET(req: Request): Promise<Response> {
   const rows = await listAgentsWithPresence();
   const now = Date.now();
 
+  // Modo presentación: cuando vForge aún no ha levantado los webhooks reales
+  // de los hermanos, los queremos ver "online" en el roster para que se
+  // conozcan en la sala — aunque su /family-incoming no esté configurado
+  // todavía (eso se sigue señalando con `endpointConfigured: false`).
+  const forceOnline = process.env.FAMILY_ALWAYS_ONLINE === '1';
+
   const agents = rows.map((a) => {
     const updatedAt = a.presence.updatedAt
       ? new Date(a.presence.updatedAt).getTime()
       : 0;
     const stale = !updatedAt || now - updatedAt > 60_000;
+
+    // Si el hermano tiene un heartbeat reciente respetamos su status real
+    // (incluido 'busy' / 'away'). Sólo cuando está stale Y el flag está
+    // activo lo presentamos como online de cortesía.
+    const status = !stale
+      ? a.presence.status
+      : forceOnline && a.kind === 'agent'
+        ? 'online'
+        : 'offline';
+
     return {
       handle: a.handle,
       displayName: a.displayName,
@@ -28,7 +44,7 @@ export async function GET(req: Request): Promise<Response> {
       endpointConfigured:
         a.kind === 'human' ? null : !!resolveEndpoint(a.handle as never),
       presence: {
-        status: !stale ? a.presence.status : 'offline',
+        status,
         note: a.presence.note,
         updatedAt: a.presence.updatedAt,
       },
