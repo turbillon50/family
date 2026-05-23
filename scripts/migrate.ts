@@ -14,7 +14,13 @@ import { Client } from 'pg';
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
   if (!url) {
-    throw new Error('DATABASE_URL(_UNPOOLED) not set');
+    // No DB configured yet — that's fine on first build before Neon is
+    // wired up, or in CI where the DB isn't reachable. Family will run in
+    // demo mode at runtime until the DB is connected.
+    console.log(
+      '[migrate] DATABASE_URL not set — skipping migrations (demo mode).',
+    );
+    return;
   }
 
   const dir = join(process.cwd(), 'drizzle');
