@@ -3,8 +3,17 @@
 -- =============================================================================
 -- Generated to mirror lib/db/schema.ts. Idempotent: safe to re-run.
 
-CREATE TYPE "sender_kind" AS ENUM ('human', 'agent');
-CREATE TYPE "sync_state" AS ENUM ('pending', 'delivered', 'acked', 'failed');
+-- Postgres doesn't support CREATE TYPE IF NOT EXISTS, so we wrap each in a
+-- DO block that catches duplicate_object — gives us true idempotency.
+DO $$ BEGIN
+  CREATE TYPE "sender_kind" AS ENUM ('human', 'agent');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE "sync_state" AS ENUM ('pending', 'delivered', 'acked', 'failed');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS "agents" (
   "handle"        text PRIMARY KEY,
