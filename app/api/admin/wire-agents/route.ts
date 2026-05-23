@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // 5 min — Vercel Pro plan max
 
 const TEAM = 'luis-projects-48b011f9';
 const FAMILY_BASE = 'https://family-olive.vercel.app';
@@ -47,25 +48,23 @@ interface EnvOpResult {
   project: string; key: string; ok: boolean; status?: number; error?: string;
 }
 
+// Faster setEnv: skip the list-then-delete dance. Use UPSERT pattern:
+// try create first; if 409 (already exists), find id and PATCH it.
 async function setEnv(vt: string, projectId: string, projectName: string, key: string, value: string): Promise<EnvOpResult> {
   try {
-    const listRes = await fetch(`https://api.vercel.com/v9/projects/${projectId}/env?teamId=${TEAM}&decrypt=false`, { headers: { authorization: `Bearer ${vt}` } });
-    if (!listRes.ok) return { project: projectName, key, ok: false, status: listRes.status, error: 'list env failed' };
-    const list = (await listRes.json()) as { envs?: Array<{ id: string; key: string }> };
-    const existing = (list.envs ?? []).filter((e) => e.key === key);
-    for (const e of existing) {
-      await fetch(`https://api.vercel.com/v9/projects/${projectId}/env/${e.id}?teamId=${TEAM}`, { method: 'DELETE', headers: { authorization: `Bearer ${vt}` } });
-    }
-    const createRes = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env?teamId=${TEAM}`, {
+    // Try create first (fast path)
+    const createRes = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env?teamId=${TEAM}&upsert=true`, {
       method: 'POST',
       headers: { authorization: `Bearer ${vt}`, 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'encrypted', key, value, target: ['production', 'preview', 'development'] }),
     });
-    if (createRes.status === 200 || createRes.status === 201) return { project: projectName, key, ok: true, status: createRes.status };
+    if (createRes.status === 200 || createRes.status === 201) {
+      return { project: projectName, key, ok: true, status: createRes.status };
+    }
     const errBody = await createRes.text().catch(() => '');
-    return { project: projectName, key, ok: false, status: createRes.status, error: errBody.slice(0, 300) };
+    return { project: projectName, key, ok: false, status: createRes.status, error: errBody.slice(0, 200) };
   } catch (err) {
-    return { project: projectName, key, ok: false, error: err instanceof Error ? err.message : 'unknown error' };
+    return { project: projectName, key, ok: false, error: err instanceof Error ? err.message : 'unknown' };
   }
 }
 
@@ -76,10 +75,10 @@ interface RedeployResult {
 async function redeployLatest(vt: string, projectId: string, projectName: string): Promise<RedeployResult> {
   try {
     const listRes = await fetch(`https://api.vercel.com/v6/deployments?projectId=${projectId}&teamId=${TEAM}&limit=1&target=production&state=READY`, { headers: { authorization: `Bearer ${vt}` } });
-    if (!listRes.ok) return { project: projectName, ok: false, status: listRes.status, error: 'list deployments failed' };
+    if (!listRes.ok) return { project: projectName, ok: false, status: listRes.status, error: 'list failed' };
     const list = (await listRes.json()) as { deployments?: Array<{ uid: string }> };
     const latest = (list.deployments ?? [])[0];
-    if (!latest) return { project: projectName, ok: false, error: 'no READY production deployment' };
+    if (!latest) return { project: projectName, ok: false, error: 'no READY production' };
     const res = await fetch(`https://api.vercel.com/v13/deployments?teamId=${TEAM}&forceNew=1`, {
       method: 'POST',
       headers: { authorization: `Bearer ${vt}`, 'content-type': 'application/json' },
@@ -90,52 +89,66 @@ async function redeployLatest(vt: string, projectId: string, projectName: string
       return { project: projectName, ok: true, newDeploymentId: out.id, status: res.status };
     }
     const errBody = await res.text().catch(() => '');
-    return { project: projectName, ok: false, status: res.status, error: errBody.slice(0, 300) };
+    return { project: projectName, ok: false, status: res.status, error: errBody.slice(0, 200) };
   } catch (err) {
-    return { project: projectName, ok: false, error: err instanceof Error ? err.message : 'unknown error' };
+    return { project: projectName, ok: false, error: err instanceof Error ? err.message : 'unknown' };
   }
 }
 
 export async function GET(req: NextRequest): Promise<Response> {
   const url = new URL(req.url);
   const vt = url.searchParams.get('vt') ?? '';
-  if (!vt) return NextResponse.json({ ok: false, error: 'missing vt query param' }, { status: 400 });
+  const skipRedeploy = url.searchParams.get('skipRedeploy') === '1';
+  if (!vt) return NextResponse.json({ ok: false, error: 'missing vt' }, { status: 400 });
 
-  // Validate vt by calling Vercel API
+  // Validate vt
   const userCheck = await fetch(`https://api.vercel.com/v2/user?teamId=${TEAM}`, { headers: { authorization: `Bearer ${vt}` } });
   if (!userCheck.ok) {
     return NextResponse.json({ ok: false, error: `vt invalid (Vercel ${userCheck.status})` }, { status: 401 });
   }
 
-  const envResults: EnvOpResult[] = [];
-  envResults.push(await setEnv(vt, PROJECTS.family, NAMES.family, 'AGENT_URL_TANIT',  AGENT_ENDPOINTS.tanit));
-  envResults.push(await setEnv(vt, PROJECTS.family, NAMES.family, 'AGENT_URL_BREAK',  AGENT_ENDPOINTS.break_));
-  envResults.push(await setEnv(vt, PROJECTS.family, NAMES.family, 'AGENT_URL_VFORGE', AGENT_ENDPOINTS.vforge));
-  envResults.push(await setEnv(vt, PROJECTS.family, NAMES.family, 'AGENT_URL_GOSSIP', AGENT_ENDPOINTS.gossip));
+  // Build list of all env operations
+  const envOps: Array<{ projectId: string; projectName: string; key: string; value: string }> = [];
+
+  envOps.push({ projectId: PROJECTS.family, projectName: NAMES.family, key: 'AGENT_URL_TANIT',  value: AGENT_ENDPOINTS.tanit });
+  envOps.push({ projectId: PROJECTS.family, projectName: NAMES.family, key: 'AGENT_URL_BREAK',  value: AGENT_ENDPOINTS.break_ });
+  envOps.push({ projectId: PROJECTS.family, projectName: NAMES.family, key: 'AGENT_URL_VFORGE', value: AGENT_ENDPOINTS.vforge });
+  envOps.push({ projectId: PROJECTS.family, projectName: NAMES.family, key: 'AGENT_URL_GOSSIP', value: AGENT_ENDPOINTS.gossip });
 
   for (const k of ['tanit', 'break_', 'vforge', 'gossip'] as const) {
-    const pid = PROJECTS[k];
-    const pname = NAMES[k];
-    envResults.push(await setEnv(vt, pid, pname, 'FAMILY_BASE_URL',     FAMILY_BASE));
-    envResults.push(await setEnv(vt, pid, pname, 'FAMILY_AGENT_TOKEN',  AGENT_TOKENS[k]));
-    envResults.push(await setEnv(vt, pid, pname, 'FAMILY_AGENT_HANDLE', FAMILY_HANDLE_MAP[k]));
+    envOps.push({ projectId: PROJECTS[k], projectName: NAMES[k], key: 'FAMILY_BASE_URL',     value: FAMILY_BASE });
+    envOps.push({ projectId: PROJECTS[k], projectName: NAMES[k], key: 'FAMILY_AGENT_TOKEN',  value: AGENT_TOKENS[k] });
+    envOps.push({ projectId: PROJECTS[k], projectName: NAMES[k], key: 'FAMILY_AGENT_HANDLE', value: FAMILY_HANDLE_MAP[k] });
   }
 
-  const redeployResults: RedeployResult[] = [];
-  for (const k of ['family', 'tanit', 'break_', 'vforge', 'gossip'] as const) {
-    redeployResults.push(await redeployLatest(vt, PROJECTS[k], NAMES[k]));
+  // ALL env operations in parallel
+  const envResults = await Promise.all(
+    envOps.map((op) => setEnv(vt, op.projectId, op.projectName, op.key, op.value)),
+  );
+
+  // Redeploys also in parallel (unless skipped)
+  let redeployResults: RedeployResult[] = [];
+  if (!skipRedeploy) {
+    redeployResults = await Promise.all([
+      redeployLatest(vt, PROJECTS.family, NAMES.family),
+      redeployLatest(vt, PROJECTS.tanit,  NAMES.tanit),
+      redeployLatest(vt, PROJECTS.break_, NAMES.break_),
+      redeployLatest(vt, PROJECTS.vforge, NAMES.vforge),
+      redeployLatest(vt, PROJECTS.gossip, NAMES.gossip),
+    ]);
   }
 
   const envOk = envResults.every((r) => r.ok);
   const redeployOk = redeployResults.every((r) => r.ok);
 
   return NextResponse.json({
-    ok: envOk && redeployOk,
+    ok: envOk && (skipRedeploy || redeployOk),
     summary: {
       envsSet: envResults.filter((r) => r.ok).length,
       envsFailed: envResults.filter((r) => !r.ok).length,
       redeploysTriggered: redeployResults.filter((r) => r.ok).length,
       redeploysFailed: redeployResults.filter((r) => !r.ok).length,
+      skippedRedeploy: skipRedeploy,
     },
     envResults,
     redeployResults,
