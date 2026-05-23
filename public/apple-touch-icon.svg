@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <rect width="180" height="180" rx="40" fill="#06080d"/>
+  <circle cx="90" cy="90" r="63" fill="none" stroke="#00e5cc" stroke-width="2" opacity="0.25"/>
+  <circle cx="60" cy="60" r="8" fill="#f5c25b"/>
+  <circle cx="120" cy="60" r="8" fill="#00e5cc"/>
+  <circle cx="146" cy="90" r="8" fill="#b53247"/>
+  <circle cx="120" cy="120" r="8" fill="#7cf28c"/>
+  <circle cx="60" cy="120" r="8" fill="#ff5fa8"/>
+  <circle cx="34" cy="90" r="8" fill="#9f7bff"/>
+  <text x="90" y="104" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-weight="700" font-size="34" fill="#e8f0f7">F</text>
+</svg>

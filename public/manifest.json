@@ -1,0 +1,25 @@
+{
+  "name": "Family — Turbillon",
+  "short_name": "Family",
+  "description": "Sala compartida de la familia: Luí, Tanit, Break, vForge, Gossip y Prism.",
+  "start_url": "/chat/lounge",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#00e5cc",
+  "background_color": "#06080d",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
